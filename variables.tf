@@ -130,6 +130,19 @@ variable "tgw_route_table_tags" {
   default     = {}
 }
 
+variable "transit_gateway_route_tables" {
+  description = "List of transit gateway route tables and their routes."
+  type = list(object({
+    name   = string
+    routes = optional(list(object({
+      destination_cidr_block = string
+      blackhole              = optional(bool, false)
+    })), [])
+    tags = optional(map(string), {})
+  }))
+  default = []
+}
+
 ################################################################################
 # Resource Access Manager
 ################################################################################
