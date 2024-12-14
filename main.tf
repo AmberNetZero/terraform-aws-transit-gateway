@@ -105,9 +105,9 @@ resource "aws_ec2_transit_gateway_route" "this" {
   for_each = { for idx, rt in var.transit_gateway_route_tables : idx => rt if length(rt.routes) > 0 }
 
   transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.this[each.key].id
-
-  destination_cidr_block = each.value.routes[0].destination_cidr_block
-  blackhole              = each.value.routes[0].blackhole
+  destination_cidr_block         = each.value.routes[0].destination_cidr_block
+  blackhole                      = try(each.value.routes[0].blackhole, null)
+  transit_gateway_attachment_id  = try(each.value.routes[0].transit_gateway_attachment_id, null)
 }
 
 resource "aws_route" "this" {
