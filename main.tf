@@ -88,26 +88,26 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "this" {
 # Route Table / Routes
 ################################################################################
 
+# Create multiple route tables
 resource "aws_ec2_transit_gateway_route_table" "this" {
-  count = var.create_tgw && var.create_tgw_routes ? 1 : 0
+  for_each = { for idx, rt in var.transit_gateway_route_tables : idx => rt }
 
   transit_gateway_id = aws_ec2_transit_gateway.this[0].id
 
   tags = merge(
     var.tags,
-    { Name = var.name },
-    var.tgw_route_table_tags,
+    { Name = each.value.name },
+    each.value.tags
   )
 }
-
+# Optional: Add routes to the route tables
 resource "aws_ec2_transit_gateway_route" "this" {
-  count = var.create_tgw_routes ? length(local.vpc_attachments_with_routes) : 0
+  for_each = { for idx, rt in var.transit_gateway_route_tables : idx => rt if length(rt.routes) > 0 }
 
-  destination_cidr_block = local.vpc_attachments_with_routes[count.index][1].destination_cidr_block
-  blackhole              = try(local.vpc_attachments_with_routes[count.index][1].blackhole, null)
+  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.this[each.key].id
 
-  transit_gateway_route_table_id = var.create_tgw ? aws_ec2_transit_gateway_route_table.this[0].id : var.transit_gateway_route_table_id
-  transit_gateway_attachment_id  = tobool(try(local.vpc_attachments_with_routes[count.index][1].blackhole, false)) == false ? aws_ec2_transit_gateway_vpc_attachment.this[local.vpc_attachments_with_routes[count.index][0].key].id : null
+  destination_cidr_block = each.value.routes[0].destination_cidr_block
+  blackhole              = each.value.routes[0].blackhole
 }
 
 resource "aws_route" "this" {
@@ -123,13 +123,12 @@ resource "aws_route" "this" {
 }
 
 resource "aws_ec2_transit_gateway_route_table_association" "this" {
-  for_each = {
-    for k, v in var.vpc_attachments : k => v if var.create_tgw && var.create_tgw_routes && try(v.transit_gateway_default_route_table_association, true) != true
-  }
+  for_each = { for k, v in var.vpc_attachments : k => v if can(v.transit_gateway_route_table_name) }
 
-  # Create association if it was not set already by aws_ec2_transit_gateway_vpc_attachment resource
   transit_gateway_attachment_id  = aws_ec2_transit_gateway_vpc_attachment.this[each.key].id
-  transit_gateway_route_table_id = var.create_tgw ? aws_ec2_transit_gateway_route_table.this[0].id : try(each.value.transit_gateway_route_table_id, var.transit_gateway_route_table_id)
+  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.this[
+    index(var.transit_gateway_route_tables[*].name, each.value.transit_gateway_route_table_name)
+  ].id
 }
 
 resource "aws_ec2_transit_gateway_route_table_propagation" "this" {
